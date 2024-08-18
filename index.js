@@ -1,56 +1,55 @@
+// server.js
 const express = require('express');
-const pt = require('puppeteer-core');
-const { exec } = require('child_process');
-const util = require('util');
-const execPromise = util.promisify(exec);
+const puppeteer = require('puppeteer');
+require('dotenv').config();
+
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
-const installDependencies = async () => {
-    try {
-        // Install Puppeteer and the required Chromium version
-        const { stdout, stderr } = await execPromise('npx @puppeteer/browsers install chrome@stable');
-        if (stderr) {
-            console.error(`stderr: ${stderr}`);
-        }
-        console.log(`stdout: ${stdout}`);
-    } catch (error) {
-        console.error(`Error during installation: ${error.message}`);
-        throw error;
-    }
+const scrapeLogic = async (url, res) => {
+  const browser = await puppeteer.launch({
+    args: [
+      '--disable-setuid-sandbox',
+      '--no-sandbox',
+      '--single-process',
+      '--no-zygote',
+    ],
+    executablePath:
+      process.env.NODE_ENV === 'production'
+        ? process.env.PUPPETEER_EXECUTABLE_PATH
+        : puppeteer.executablePath(),
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.goto(url);
+
+    // Set screen size
+    await page.setViewport({ width: 1080, height: 1024 });
+
+    // Capture screenshot
+    const screenshotBuffer = await page.screenshot();
+
+    // Send screenshot
+    res.setHeader('Content-Type', 'image/png');
+    res.send(screenshotBuffer);
+  } catch (e) {
+    console.error(e);
+    res.status(500).send(`Something went wrong while running Puppeteer: ${e}`);
+  } finally {
+    await browser.close();
+  }
 };
 
-const startServer = async () => {
-    app.get('/ss', async (req, res) => {
-        try {
-            const browser = await pt.launch({
-                executablePath: './chrome/linux-127.0.6533.119/chrome-linux64', // Specify the path to Chromium if needed
-            });
-            const page = await browser.newPage();
-            await page.setViewport({ width: 1000, height: 500 });
-            await page.goto('https://www.tutorialspoint.com/index.html');
-            const screenshot = await page.screenshot();
-            await browser.close();
-            res.contentType('image/png');
-            res.send(screenshot);
-        } catch (error) {
-            console.error(`Error capturing screenshot: ${error.message}`);
-            res.status(500).send('Error capturing screenshot');
-        }
-    });
+app.get('/ss', async (req, res) => {
+  const url = req.query.url;
+  if (!url) {
+    return res.status(400).send('URL query parameter is required');
+  }
 
-    app.listen(port, () => {
-        console.log(`Server running at http://localhost:${port}`);
-    });
-};
+  await scrapeLogic(url, res);
+});
 
-const init = async () => {
-    try {
-        await installDependencies();
-        startServer();
-    } catch (error) {
-        console.error('Failed to initialize server:', error);
-    }
-};
-
-init();
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
