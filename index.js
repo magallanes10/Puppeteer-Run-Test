@@ -1,5 +1,5 @@
 const express = require('express');
-const pt = require('puppeteer');
+const pt = require('puppeteer-core');
 const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
@@ -8,14 +8,14 @@ const port = 3000;
 
 const installDependencies = async () => {
     try {
-        // Install Chromium for Puppeteer
-        const { stdout, stderr } = await execPromise('npx @puppeteer/browsers install chromedriver@116.0.5793.0');
+        // Install Puppeteer and the required Chromium version
+        const { stdout, stderr } = await execPromise('npx @puppeteer/browsers install chrome@stable');
         if (stderr) {
             console.error(`stderr: ${stderr}`);
         }
         console.log(`stdout: ${stdout}`);
     } catch (error) {
-        console.error(`Error during Chromium installation: ${error.message}`);
+        console.error(`Error during installation: ${error.message}`);
         throw error;
     }
 };
@@ -23,7 +23,9 @@ const installDependencies = async () => {
 const startServer = async () => {
     app.get('/ss', async (req, res) => {
         try {
-            const browser = await pt.launch();
+            const browser = await pt.launch({
+                executablePath: './chrome/linux-127.0.6533.119/chrome-linux64', // Specify the path to Chromium if needed
+            });
             const page = await browser.newPage();
             await page.setViewport({ width: 1000, height: 500 });
             await page.goto('https://www.tutorialspoint.com/index.html');
